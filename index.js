@@ -1,6 +1,8 @@
 const axios = require('axios');
 const SlackBot = require('slackbots');
 const dotenv = require('dotenv');
+const maxRetries = parseInt(process.env.MAX_RETRIES, 10);
+const map = {};
 
 dotenv.config();
 const bot = new SlackBot({
@@ -32,11 +34,16 @@ bot.on('message', data => {
 function handleMessage(data) {
   var message = data.attachments[0].text;
   var pipelineId = message.split('#')[1].split('>')[0];
-  var repoPath = message.split(process.env.BASE_URL + '/')[1].split('>')[0].split('|')[0]
-  var projectName = repoPath.split('/')[repoPath.split('/').length - 1]
+  var repoPath = message
+    .split(process.env.BASE_URL + '/')[1]
+    .split('>')[0]
+    .split('|')[0];
+  var projectName = repoPath.split('/')[repoPath.split('/').length - 1];
   var projectId = null;
   var jobId = null;
+  var cause = null;
   var shouldRetry = false;
+  var retryId = projectName + pipelineId;
   console.log('namespace ', repoPath);
   console.log('projectName ', projectName);
   console.log('pipelineId ', pipelineId);
@@ -51,8 +58,6 @@ function handleMessage(data) {
         process.env.GITLAB_TOKEN,
     )
     .then(res => {
-      console.log(res.data.length);
-      console.log(res.data);
       for (let i in res.data) {
         console.log(res.data[i].path_with_namespace);
         if (res.data[i].path_with_namespace === repoPath) {
@@ -104,37 +109,58 @@ function handleMessage(data) {
       let causes = process.env.CAUSES.split(',');
       for (let i in causes) {
         if (res.data.indexOf(causes[i]) > -1) {
+          let lines = res.data.split('\n');
+          for (let j in lines) {
+            if (lines[j].indexOf(causes[i]) > -1) {
+              cause = lines[j];
+            }
+          }
           shouldRetry = true;
           break;
         }
       }
       console.log('shouldRetry ', shouldRetry);
       if (!shouldRetry) {
-        return;
+        throw new Error('should not be retried');
       }
-      return axios.post(
-        process.env.BASE_URL +
-          '/api/v4/' +
-          'projects/' +
-          projectId +
-          '/jobs/' +
-          jobId +
-          '/retry?private_token=' +
-          process.env.GITLAB_TOKEN,
-      );
-    })
-    .then(res => {
-      console.log('Successfully retried.');
-      let msg =
-        repoPath +
-        '/pipelines/' +
-        pipelineId +
-        ' JobID ' +
-        jobId +
-        ' is successfully retried.';
-      console.log(data);
-      console.log(msg);
-      bot.postMessageToChannel('brilife', msg);
+      map[retryId] = map[retryId] || 0;
+      map[retryId] += 1;
+      if (map[retryId] > maxRetries) {
+        console.log('MAX_RETRIES reaced for ' + retryId);
+        return;
+      } else {
+        setTimeout(() => {
+          // Let give it a second before retry
+          axios
+            .post(
+              process.env.BASE_URL +
+                '/api/v4/' +
+                'projects/' +
+                projectId +
+                '/jobs/' +
+                jobId +
+                '/retry?private_token=' +
+                process.env.GITLAB_TOKEN,
+            )
+            .then(res => {
+              console.log('Successfully retried.');
+              let msg = cause;
+              msg +=
+                '\n\n' +
+                repoPath +
+                '/pipelines/' +
+                pipelineId +
+                ' JobID ' +
+                jobId +
+                ' is successfully retried (attempt ' +
+                map[retryId] +
+                ').';
+              console.log(data);
+              console.log(msg);
+              bot.postMessageToChannel(process.env.CHANNEL, msg);
+            });
+        }, 1000);
+      }
     })
     .catch(err => {
       console.log(err.message);
