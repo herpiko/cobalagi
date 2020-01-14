@@ -109,6 +109,9 @@ function handleMessage(data) {
         }
       }
       console.log('shouldRetry ', shouldRetry);
+      if (!shouldRetry) {
+        return;
+      }
       return axios.post(
         process.env.BASE_URL +
           '/api/v4/' +
