@@ -1,0 +1,18 @@
+{
+  "name": "cobalagi",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "./node_modules/.bin/nodemon -x 'node index.js || (sleep 1; touch index.js)'",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.19.1",
+    "dotenv": "^8.2.0",
+    "nodemon": "^2.0.2",
+    "slackbots": "^1.2.0"
+  }
+}
