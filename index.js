@@ -47,6 +47,7 @@ function handleMessage(data) {
   console.log('namespace ', repoPath);
   console.log('projectName ', projectName);
   console.log('pipelineId ', pipelineId);
+  // Get the project info
   axios
     .get(
       process.env.BASE_URL +
@@ -59,7 +60,6 @@ function handleMessage(data) {
     )
     .then(res => {
       for (let i in res.data) {
-        console.log(res.data[i].path_with_namespace);
         if (res.data[i].path_with_namespace === repoPath) {
           projectId = res.data[i].id;
           break;
@@ -70,6 +70,7 @@ function handleMessage(data) {
         throw new Error('project id not found');
       }
       console.log('projectId ', projectId);
+      // Get the pipeline info
       return axios.get(
         process.env.BASE_URL +
           '/api/v4/' +
@@ -83,16 +84,16 @@ function handleMessage(data) {
       );
     })
     .then(res => {
-      for (let i in res.data) {
-        if (res.data[i].status === 'failed') {
-          jobId = res.data[i].id;
-          break;
-        }
+      res.data.reverse();
+      // The first should be the latest job
+      if (res.data.length > 0 && res.data[0].status === 'failed') {
+        jobId = res.data[0].id;
       }
       if (!jobId) {
-        throw new Error('project id not found');
+        throw new Error('failed job id not found');
       }
       console.log('jobId ', jobId);
+      // Get the job log
       return axios.get(
         process.env.BASE_URL +
           '/api/v4/' +
@@ -105,7 +106,6 @@ function handleMessage(data) {
       );
     })
     .then(res => {
-      console.log(res.data);
       let causes = process.env.CAUSES.split(',');
       for (let i in causes) {
         if (res.data.indexOf(causes[i]) > -1) {
