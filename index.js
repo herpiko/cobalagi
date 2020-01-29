@@ -9,7 +9,6 @@ const bot = new SlackBot({
   token: `${process.env.BOT_TOKEN}`,
   name: 'cobalagi',
 });
-
 bot.on('message', data => {
   if (data.type !== 'message') {
     return;
@@ -21,9 +20,9 @@ bot.on('message', data => {
     !(
       data.attachments &&
       data.attachments[0] &&
-      data.attachments[0].text &&
-      data.attachments[0].text.indexOf('failed in') > -1 &&
-      data.attachments[0].text.indexOf('Pipeline') > -1
+      data.attachments[0].fallback &&
+      data.attachments[0].fallback.indexOf('failed in') > -1 &&
+      data.attachments[0].fallback.indexOf('Pipeline') > -1
     )
   ) {
     return;
@@ -32,7 +31,7 @@ bot.on('message', data => {
   handleMessage(data);
 });
 function handleMessage(data) {
-  var message = data.attachments[0].text;
+  var message = data.attachments[0].fallback;
   var pipelineId = message.split('#')[1].split('>')[0];
   var repoPath = message
     .split(process.env.BASE_URL + '/')[1]
@@ -65,7 +64,6 @@ function handleMessage(data) {
           break;
         }
       }
-      console.log(projectId);
       if (!projectId) {
         throw new Error('project id not found');
       }
@@ -85,9 +83,11 @@ function handleMessage(data) {
     })
     .then(res => {
       res.data.reverse();
-      // The first should be the latest job
-      if (res.data.length > 0 && res.data[0].status === 'failed') {
-        jobId = res.data[0].id;
+      for (let i in res.data) {
+        if (res.data[i].status === 'failed') {
+          jobId = res.data[0].id;
+          break;
+        }
       }
       if (!jobId) {
         throw new Error('failed job id not found');
@@ -155,9 +155,17 @@ function handleMessage(data) {
                 ' is successfully retried (attempt ' +
                 map[retryId] +
                 ').';
-              console.log(data);
-              console.log(msg);
-              bot.postMessageToChannel(process.env.CHANNEL, msg);
+              bot.getChannels().then(channelResult => {
+                for (let i in channelResult.channels) {
+                  if (channelResult.channels[i].id === data.channel) {
+                    bot.postMessageToChannel(
+                      channelResult.channels[i].name,
+                      msg,
+                    );
+                    break;
+                  }
+                }
+              });
             });
         }, 1000);
       }
